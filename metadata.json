@@ -1,0 +1,6 @@
+{
+  "name": "NexusPulse",
+  "description": "Real-time contact management that synchronizes with social media profiles and live activity.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

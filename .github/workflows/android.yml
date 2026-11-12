@@ -1,0 +1,161 @@
+name: Android CI & Build APK
+
+on:
+  push:
+    branches: [ "main", "master", "develop" ]
+    tags: [ "v*" ]
+  pull_request:
+    branches: [ "main", "master", "develop" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    name: Build Debug APK & Run Unit Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Accept Android SDK Licenses & Install API 36
+        run: |
+          yes | sdkmanager --licenses || true
+          sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Prepare Environment & Debug Keystore
+        run: |
+          if [ ! -f .env ] && [ -f .env.example ]; then
+            cp .env.example .env
+          fi
+          if [ ! -f debug.keystore ]; then
+            if [ -s debug.keystore.base64 ]; then
+              base64 --decode debug.keystore.base64 > debug.keystore
+            else
+              keytool -genkeypair -v \
+                -keystore debug.keystore \
+                -storepass android \
+                -alias androiddebugkey \
+                -keypass android \
+                -keyalg RSA \
+                -keysize 2048 \
+                -validity 10000 \
+                -dname "CN=Android Debug,O=Android,C=US"
+            fi
+          fi
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: wrapper
+
+      - name: Run Unit & Robolectric Tests
+        run: gradle :app:testDebugUnitTest --stacktrace
+
+      - name: Assemble Debug APK
+        run: gradle :app:assembleDebug --stacktrace
+
+      - name: Upload Unit Test Reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-reports
+          path: app/build/reports/tests/testDebugUnitTest/
+          retention-days: 14
+
+      - name: Upload Debug APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NexusPulse-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          retention-days: 30
+
+  build-release:
+    name: Build Signed Release APK & Bundle
+    needs: build-and-test
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Accept Android SDK Licenses & Install API 36
+        run: |
+          yes | sdkmanager --licenses || true
+          sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Prepare Environment & Release Keystore
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          if [ ! -f .env ] && [ -f .env.example ]; then
+            cp .env.example .env
+          fi
+          if [ ! -f debug.keystore ] && [ -s debug.keystore.base64 ]; then
+            base64 --decode debug.keystore.base64 > debug.keystore
+          fi
+          if [ -n "$RELEASE_KEYSTORE_BASE64" ]; then
+            echo "$RELEASE_KEYSTORE_BASE64" | base64 --decode > my-upload-key.jks
+          else
+            echo "No RELEASE_KEYSTORE_BASE64 secret found; generating fallback release keystore for CI verification."
+            keytool -genkeypair -v \
+              -keystore my-upload-key.jks \
+              -storepass androidrelease \
+              -alias upload \
+              -keypass androidrelease \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname "CN=NexusPulse Release,O=NexusPulse,C=US"
+          fi
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: wrapper
+
+      - name: Assemble Release APK & AAB
+        env:
+          KEYSTORE_PATH: ${{ github.workspace }}/my-upload-key.jks
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD != '' && secrets.STORE_PASSWORD || 'androidrelease' }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD != '' && secrets.KEY_PASSWORD || 'androidrelease' }}
+        run: gradle :app:assembleRelease :app:bundleRelease --stacktrace
+
+      - name: Upload Release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: NexusPulse-release-apk
+          path: app/build/outputs/apk/release/*.apk
+          retention-days: 90
+
+      - name: Upload Release AAB (Play Store Bundle)
+        uses: actions/upload-artifact@v4
+        with:
+          name: NexusPulse-release-aab
+          path: app/build/outputs/bundle/release/*.aab
+          retention-days: 90
