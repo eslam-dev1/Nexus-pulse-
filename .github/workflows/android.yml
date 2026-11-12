@@ -68,14 +68,14 @@ jobs:
 
       - name: Upload Unit Test Reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: unit-test-reports
           path: app/build/reports/tests/testDebugUnitTest/
           retention-days: 14
 
       - name: Upload Debug APK Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: NexusPulse-debug-apk
           path: app/build/outputs/apk/debug/*.apk
@@ -147,14 +147,14 @@ jobs:
         run: gradle :app:assembleRelease :app:bundleRelease --stacktrace
 
       - name: Upload Release APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: NexusPulse-release-apk
           path: app/build/outputs/apk/release/*.apk
           retention-days: 90
 
       - name: Upload Release AAB (Play Store Bundle)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: NexusPulse-release-aab
           path: app/build/outputs/bundle/release/*.aab
