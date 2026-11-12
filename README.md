@@ -29,7 +29,7 @@ This repository includes an automated GitHub Actions pipeline in [`.github/workf
 
 ### What Runs Automatically
 1. **On every Push / Pull Request (`main`, `master`, `develop`)**:
-   - Sets up **JDK 21 (Temurin)**, **Android SDK 36**, and **Gradle 9.3.1** (via `gradle/actions/setup-gradle@v4`).
+   - Sets up **JDK 21 (Temurin)**, accepts **Android SDK 36 / 36.1** licenses on the pre-installed runner SDK, and configures **Gradle 9.3.1** (via `gradle/actions/setup-gradle@v4`).
    - Restores `debug.keystore` from `debug.keystore.base64`.
    - Executes unit and Robolectric tests (`gradle :app:testDebugUnitTest`).
    - Builds the Debug APK (`gradle :app:assembleDebug`) and uploads it as the **`NexusPulse-debug-apk`** artifact.
